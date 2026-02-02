@@ -1,0 +1,95 @@
+---
+title: "exploration"
+author: "Joshua Paul Cohen"
+format: html
+---
+
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(patchwork)
+
+data_path <- here::here('data', 'lmopdata.xlsx')
+
+landfills <- read_excel(
+  data_path,
+  sheet = 2
+  )
+
+field_desc <- read_excel(
+  data_path,
+  sheet = 3
+)
+
+current_prj_status_expls <- tibble(
+  status = c( 'Operational', 'Shutdown', 'Construction', 'Planned', 'Candidate', 'Future Potential', 'Low Potential', 'Unknown' ),
+  explanation = c('Project or expansion is online', 'Project or expansion has ceased operations', 'Construction is underway on project or expansion', 'Planning is underway on project or expansion (between Candidate and Construction).		Low Potential: Landfill is closed and does not meet the technical criteria for Candidate status; or landfill is not considered a Candidate due to site-specific information', 'Landfill is accepting waste or has been closed for five years or less, has at least one million tons of waste, and does not have an operational, under-construction, or planned project; can also be designated based on actual interest by the site', 'Landfill is open but does not meet the technical criteria for Candidate status yet; or landfill already has an Operational project but there is opportunity for additional energy recovery', 'Landfill is closed and does not meet the technical criteria for Candidate status; or landfill is not considered a Candidate due to site-specific information', 'LMOP Database does not have sufficient data to determine potential for an LFG energy project')
+  )
+			
+
+```
+
+```{r}
+landfills %>% 
+  janitor::clean_names() %>%
+  drop_na(waste_in_place_year) %>% 
+  group_by(state) %>%
+  reframe(waste_city_mean = mean(waste_in_place_tons))
+```
+
+
+```{r}
+landfills %>% 
+  janitor::clean_names() %>%
+  drop_na(waste_in_place_year) %>% 
+  group_by(state) %>%
+  reframe(waste_city_mean = mean(waste_in_place_tons)) %>% 
+  mutate(waste_city_mean = ifelse(is.na(waste_city_mean), 0, waste_city_mean)) %>%
+  slice_max(waste_city_mean, n = 20) %>%
+  
+  # arrange(waste_in_place_tons, .by_group = TRUE) %>%
+  # mutate( city = fct_reorder(city, waste_in_place_tons) ) %>%
+  # select(landfill_name, city, state, waste_in_place_tons) %>% 
+  ggplot( aes(fct_rev(fct_reorder(state, waste_city_mean)), waste_city_mean) ) +
+  geom_col() + 
+  labs(x = 'State', y = 'Avg Waste/Landfill')
+```
+
+
+```{r}
+landfills_state_summary <- landfills %>% 
+  group_by(State) %>% 
+  summarize(pct_gas_program_state = length(which(`LFG Collection System In Place?`== 'Yes'))/n())
+
+
+gas_programs <- landfills %>% 
+  mutate(`LFG Collection System In Place?` = case_when(
+    `LFG Collection System In Place?` %in% c('No', 'Shutdown', 'Unknown') ~ 'No/Shutdown/Unknown', 
+    .default = `LFG Collection System In Place?`
+  )) %>%
+  ggplot(data = ., mapping = aes(x = `LFG Collection System In Place?`)) + 
+  geom_bar() + 
+  coord_flip() + 
+  labs(title = 'Does the landfill have a gas management program?') + 
+  theme(axis.title = element_blank())
+
+
+gas_by_state <- bind_rows(
+landfills_state_summary %>% 
+  slice_max(pct_gas_program_state, n = 5), 
+
+landfills_state_summary %>% 
+  slice_min(pct_gas_program_state, n = 5)
+  
+) %>% 
+  ggplot(aes(fct_reorder(State, pct_gas_program_state), pct_gas_program_state)) + 
+  geom_col() + 
+  labs(title = 'Percent of landfills with gas management programs by state') + 
+  coord_flip() + 
+  theme(axis.title = element_blank())
+
+
+gas_programs / gas_by_state
+```
+
