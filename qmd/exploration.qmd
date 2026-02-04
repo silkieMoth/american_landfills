@@ -83,11 +83,18 @@ landfills_state_summary %>%
   slice_min(pct_gas_program_state, n = 5)
   
 ) %>% 
-  ggplot(aes(fct_reorder(State, pct_gas_program_state), pct_gas_program_state)) + 
+  ggplot(aes(fct_reorder(State, pct_gas_program_state), pct_gas_program_state, label = paste0(round(pct_gas_program_state * 100, 2), '%'))) + 
   geom_col() + 
+  geom_text() +
   labs(title = 'Percent of landfills with gas management programs by state') + 
-  coord_flip() + 
-  theme(axis.title = element_blank())
+  coord_flip(clip = 'off') + 
+  scale_y_continuous(
+    expand = c(0, NA), 
+    labels = c('0%', '25%', '50%', '75%', '100%'),
+    breaks = c(0, 0.25, 0.5, 0.75, 1)
+    ) +
+  theme(axis.title = element_blank(), 
+        plot.margin = margin(0,1,0,0,'cm'))
 
 
 gas_programs / gas_by_state
