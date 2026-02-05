@@ -11,6 +11,8 @@ library(readxl)
 library(patchwork)
 
 library(tmap)
+library(spData)
+library(sf)
 
 data_path <- here::here('data', 'lmopdata.xlsx')
 
@@ -125,6 +127,30 @@ gas_programs / gas_by_state
 ```
 
 ```{r}
+landfills_sf <- landfills %>% 
+  filter(
+    !is.na(Latitude), 
+    !is.na(Longitude)) %>%
+  st_as_sf(coords = c('Longitude', 'Latitude'))
 
+tm_shape(spData::us_states) + 
+  tm_borders() + 
+tm_shape(landfills_sf) + 
+  tm_dots()
+```
+
+```{r}
+landfills %>% 
+  filter(
+    !is.na(Latitude), 
+    !is.na(Longitude)) %>%
+  # select(`Landfill Name`, Latitude, Longitude) %>%
+  st_as_sf(coords = c('Longitude', 'Latitude'))
+```
+
+```{r}
+landfills %>% 
+  filter(is.na(Latitude), 
+         is.na(Longitude))
 ```
 
