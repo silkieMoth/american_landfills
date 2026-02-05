@@ -10,6 +10,8 @@ library(tidyverse)
 library(readxl)
 library(patchwork)
 
+library(tmap)
+
 data_path <- here::here('data', 'lmopdata.xlsx')
 
 landfills <- read_excel(
@@ -83,9 +85,27 @@ landfills_state_summary %>%
   slice_min(pct_gas_program_state, n = 5)
   
 ) %>% 
-  ggplot(aes(fct_reorder(State, pct_gas_program_state), pct_gas_program_state, label = paste0(round(pct_gas_program_state * 100, 2), '%'))) + 
-  geom_col() + 
-  geom_text() +
+  ggplot(
+    aes(
+      fct_reorder(State, pct_gas_program_state), 
+      pct_gas_program_state, 
+      label = paste0(format(round(pct_gas_program_state * 100, 2), nsmall = 2), '%'), 
+      fill = pct_gas_program_state
+      ), 
+    ) + 
+  geom_col(
+    width = 1,
+    color = 'white', 
+    show.legend = FALSE
+    ) + 
+  geom_text(
+    nudge_x = 0.05,
+    nudge_y = -0.05, 
+    size = 3,
+    # label.padding = unit(0.1, 'lines'), 
+    # fill = alpha('white',0.5)
+    color = 'white'
+    ) +
   labs(title = 'Percent of landfills with gas management programs by state') + 
   coord_flip(clip = 'off') + 
   scale_y_continuous(
@@ -93,10 +113,18 @@ landfills_state_summary %>%
     labels = c('0%', '25%', '50%', '75%', '100%'),
     breaks = c(0, 0.25, 0.5, 0.75, 1)
     ) +
+  scale_fill_gradient(low = 'darkred', high = 'limegreen') +
+  theme_minimal() + 
   theme(axis.title = element_blank(), 
-        plot.margin = margin(0,1,0,0,'cm'))
+        plot.margin = margin(0,1,0,0,'cm'), 
+        panel.grid = element_blank()
+        )
 
 
 gas_programs / gas_by_state
+```
+
+```{r}
+
 ```
 
