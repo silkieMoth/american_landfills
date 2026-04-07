@@ -62,44 +62,95 @@ landfills %>%
 
 
 ```{r}
+# grab percent of landfills that have a collection system by state
 landfills_state_summary <- landfills %>% 
-  group_by(State) %>% 
-  summarize(pct_gas_program_state = length(which(`LFG Collection System In Place?`== 'Yes'))/n())
+  group_by(State) %>%
+  
+  # has LFG collection/total number of landfills
+  summarize(
+    pct_gas_program_state = length(which(`LFG Collection System In Place?`== 'Yes'))/n()
+  )
 
 
+
+
+     #                        BEGIN GRAPHS                         ~~~
+     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#....graph 1: number of landfills with LFG management program....
 gas_programs <- landfills %>% 
+  
+  # consolidate all no values
   mutate(`LFG Collection System In Place?` = case_when(
     `LFG Collection System In Place?` %in% c('No', 'Shutdown', 'Unknown') ~ 'No/Shutdown/Unknown', 
     .default = `LFG Collection System In Place?`
-  )) %>%
-  ggplot(data = ., mapping = aes(x = `LFG Collection System In Place?`)) + 
-  geom_bar() + 
-  coord_flip() + 
+  ), 
+  # id = cur_group_id()
+  ) %>%
+  
+  # make graph
+  ggplot(data = ., mapping = aes(
+    x = `LFG Collection System In Place?`, 
+    label = after_stat(count),
+    fill = `LFG Collection System In Place?`
+    )
+  ) + 
+  
+  geom_bar(show.legend = FALSE) + 
+  
+  geom_text(
+    stat = "count",
+    nudge_x = 0.05,
+    nudge_y = -100,
+    size = 5,
+    color = 'white'
+    ) +
+  
+  coord_flip() + # put x axis on y and vise-versa
   labs(title = 'Does the landfill have a gas management program?') + 
-  theme(axis.title = element_blank())
+  scale_y_continuous(
+    expand = c(0, NA)
+  ) + 
+  scale_fill_manual(values = c('darkred', 'limegreen')) +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(), # remove axis labels
+    panel.grid = element_blank()
+  )
 
 
+
+
+
+
+#...graph 2: % landfills with gas management programs by state...
 gas_by_state <- bind_rows(
+
+# grab top 5 and bottom 5 states to prevent crowding
 landfills_state_summary %>% 
   slice_max(pct_gas_program_state, n = 5), 
-
 landfills_state_summary %>% 
   slice_min(pct_gas_program_state, n = 5)
   
 ) %>% 
   ggplot(
     aes(
-      fct_reorder(State, pct_gas_program_state), 
+      fct_reorder(State, pct_gas_program_state), # display states in order of pct
       pct_gas_program_state, 
-      label = paste0(format(round(pct_gas_program_state * 100, 2), nsmall = 2), '%'), 
-      fill = pct_gas_program_state
+      label = paste0(format(
+                            round(pct_gas_program_state * 100, 2), 
+                      nsmall = 2), # format forces 2 decimal points here
+              '%'), 
+      fill = pct_gas_program_state # color code bars by % value
       ), 
     ) + 
+  
   geom_col(
     width = 1,
     color = 'white', 
     show.legend = FALSE
     ) + 
+  
   geom_text(
     nudge_x = 0.05,
     nudge_y = -0.05, 
@@ -108,49 +159,71 @@ landfills_state_summary %>%
     # fill = alpha('white',0.5)
     color = 'white'
     ) +
+  
   labs(title = 'Percent of landfills with gas management programs by state') + 
-  coord_flip(clip = 'off') + 
+  coord_flip(clip = 'off') + # allow drawing of objects outside plot extent
+  
   scale_y_continuous(
-    expand = c(0, NA), 
+    expand = c(0, NA), # remove bar buffer on edges
     labels = c('0%', '25%', '50%', '75%', '100%'),
     breaks = c(0, 0.25, 0.5, 0.75, 1)
     ) +
   scale_fill_gradient(low = 'darkred', high = 'limegreen') +
+  
   theme_minimal() + 
-  theme(axis.title = element_blank(), 
-        plot.margin = margin(0,1,0,0,'cm'), 
-        panel.grid = element_blank()
-        )
+  theme(
+    axis.title = element_blank(), # remove axis labels
+    plot.margin = margin(0,1,0,0,'cm'), # increase buffer on right for both graphs
+    panel.grid = element_blank() # remove grid
+  )
 
 
 gas_programs / gas_by_state
 ```
 
+
+```{r}
+landfills %>% janitor::clean_names() %>% 
+  select(landfill_name, state, lfg_collected_mmscfd) %>% 
+  group_by(state) %>% 
+  na.omit() %>%
+  reframe(lfg_collected = mean(lfg_collected_mmscfd)) %>% 
+  slice_max(lfg_collected, n = 10) %>% 
+  
+ggplot(aes(fct_reorder(state, lfg_collected, .desc = TRUE), lfg_collected)) + 
+  geom_col()
+```
+```{r}
+landfills %>% janitor::clean_names() %>% 
+  select(landfill_name, state, lfg_collected_mmscfd) %>% 
+  group_by(state) %>% 
+  # count(vals_lost = is.na((lfg_collected_mmscfd)))# %>% 
+  # filter(vals_lost == TRUE)
+  reframe(vals_lost = paste(round(max(is.na(lfg_collected_mmscfd)/n() * 100, 2)), '%'))
+```
+
+
 ```{r}
 landfills_sf <- landfills %>% 
+  mutate(`LFG Collection System In Place?` = case_when(
+    `LFG Collection System In Place?` %in% c('No', 'Shutdown', 'Unknown') ~ 'No/Shutdown/Unknown', 
+    .default = `LFG Collection System In Place?`
+  )) %>%
   filter(
+    # get rid of landfills with no geo data
     !is.na(Latitude), 
-    !is.na(Longitude)) %>%
+    !is.na(Longitude), 
+    # and those that have closed
+    `Landfill Closure Year` > ymd( today(), truncated = 2L ) %>% year()
+    ) %>%
   st_as_sf(coords = c('Longitude', 'Latitude'))
 
 tm_shape(spData::us_states) + 
   tm_borders() + 
 tm_shape(landfills_sf) + 
-  tm_dots()
+  tm_dots(col = 'LFG Collection System In Place?', palette = c("red", "blue"))
 ```
 
-```{r}
-landfills %>% 
-  filter(
-    !is.na(Latitude), 
-    !is.na(Longitude)) %>%
-  # select(`Landfill Name`, Latitude, Longitude) %>%
-  st_as_sf(coords = c('Longitude', 'Latitude'))
-```
 
-```{r}
-landfills %>% 
-  filter(is.na(Latitude), 
-         is.na(Longitude))
-```
+
 
