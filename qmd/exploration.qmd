@@ -26,6 +26,8 @@ field_desc <- read_excel(
   sheet = 3
 )
 
+landfills_clean <- landfills %>% janitor::clean_names()
+
 current_prj_status_expls <- tibble(
   status = c( 'Operational', 'Shutdown', 'Construction', 'Planned', 'Candidate', 'Future Potential', 'Low Potential', 'Unknown' ),
   explanation = c('Project or expansion is online', 'Project or expansion has ceased operations', 'Construction is underway on project or expansion', 'Planning is underway on project or expansion (between Candidate and Construction).		Low Potential: Landfill is closed and does not meet the technical criteria for Candidate status; or landfill is not considered a Candidate due to site-specific information', 'Landfill is accepting waste or has been closed for five years or less, has at least one million tons of waste, and does not have an operational, under-construction, or planned project; can also be designated based on actual interest by the site', 'Landfill is open but does not meet the technical criteria for Candidate status yet; or landfill already has an Operational project but there is opportunity for additional energy recovery', 'Landfill is closed and does not meet the technical criteria for Candidate status; or landfill is not considered a Candidate due to site-specific information', 'LMOP Database does not have sufficient data to determine potential for an LFG energy project')
@@ -182,11 +184,13 @@ gas_programs / gas_by_state
 ```
 
 
+
+
 ```{r}
 landfills %>% janitor::clean_names() %>% 
   select(landfill_name, state, lfg_collected_mmscfd) %>% 
   group_by(state) %>% 
-  na.omit() %>%
+  na.omit(lfg_collected_mmscfd) %>%
   reframe(lfg_collected = mean(lfg_collected_mmscfd)) %>% 
   slice_max(lfg_collected, n = 10) %>% 
   
@@ -224,6 +228,86 @@ tm_shape(landfills_sf) +
   tm_dots(col = 'LFG Collection System In Place?', palette = c("red", "blue"))
 ```
 
+```{r}
+landfills_clean %>% 
+  drop_na(
+    lfg_collected_mmscfd, 
+    lfg_flared_mmscfd, 
+    actual_mw_generation, 
+    rated_mw_capacity, 
+    lfg_flow_to_project_mmscfd, 
+    waste_in_place_tons
+    ) %>%  
+  group_by(state) %>% 
+  reframe(
+    lfg_collected_norm = mean(lfg_collected_mmscfd/waste_in_place_tons), 
+    lfg_flared_norm = mean(lfg_flared_mmscfd/waste_in_place_tons), 
+    mw_generation_norm = mean(actual_mw_generation/waste_in_place_tons), 
+    mw_capacity_norm = mean(rated_mw_capacity/waste_in_place_tons), 
+    lfg_flow_norm = mean(lfg_flow_to_project_mmscfd/waste_in_place_tons)
+    ) %>% 
+  slice_max(lfg_collected_norm, n = 10) %>%
+  
+
+  ggplot(
+    aes(fct_reorder(state, lfg_collected_norm),
+        lfg_collected_norm)
+    ) +
+    geom_col()
+```
+
+```{r}
+field_desc %>% filter(`Field Name` == 'LFG Flared (mmscfd)') %>% select(Description) %>% as.character() 
+```
 
 
+```{r}
+
+grading <- function(col, median_val){ 
+  
+  graded_col = case_when(
+      col/median_val >= 1.3 ~ 'A', 
+      col/median_val >= 1.1 & col/median_val < 1.3 ~ 'B', 
+      col/median_val >= 0.9 & col/median_val < 1.1 ~ 'C', 
+      col/median_val >= 0.7 & col/median_val < 0.9 ~ 'D', 
+      col/median_val < 0.7 ~ 'F',
+    )
+  
+  return(graded_col)
+  
+  }
+
+landfills_clean %>% 
+  drop_na(
+    lfg_collected_mmscfd, 
+    lfg_flared_mmscfd, 
+    actual_mw_generation, 
+    rated_mw_capacity, 
+    lfg_flow_to_project_mmscfd, 
+    waste_in_place_tons
+    ) %>%  
+  group_by(state) %>% 
+  reframe(
+    lfg_collected_norm = mean(lfg_collected_mmscfd/waste_in_place_tons), 
+    lfg_flared_norm = mean(lfg_flared_mmscfd/waste_in_place_tons), 
+    mw_generation_norm = mean(actual_mw_generation/waste_in_place_tons), 
+    mw_capacity_norm = mean(rated_mw_capacity/waste_in_place_tons), 
+    lfg_flow_norm = mean(lfg_flow_to_project_mmscfd/waste_in_place_tons)
+    ) %>% 
+  mutate(
+    lfg_collected_median = median(lfg_collected_norm), 
+    lfg_flared_median = median(lfg_flared_norm), 
+    mw_generation_median = median(mw_generation_norm), 
+    mw_capacity_median = median(mw_capacity_norm), 
+    lfg_flow_median = median(lfg_flow_norm)
+    ) %>% 
+  # not sure how to grade the categories yet
+  mutate(
+    lfg_collected_grade = grading(lfg_collected_norm, lfg_collected_median), 
+    lfg_flared_grade = grading(lfg_flared_norm, lfg_flared_median), 
+    mw_generation_grade = grading(mw_generation_norm, mw_generation_median), 
+    mw_capacity_grade = grading(mw_capacity_norm, mw_capacity_median), 
+    lfg_flow_grade = grading(lfg_flow_norm, lfg_flow_median)
+  )
+```
 
